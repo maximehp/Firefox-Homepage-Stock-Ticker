@@ -6,6 +6,25 @@ FIREFOX_APP="${FIREFOX_APP:-/Applications/Firefox.app}"
 PROFILES_INI="${HOME}/Library/Application Support/Firefox/profiles.ini"
 PROFILE_DIR="${PROFILE_DIR:-}"
 BACKUP_DIR="${BACKUP_DIR:-}"
+MANIFEST_NAME="install-manifest.tsv"
+TARGET_NAME="install-target.tsv"
+
+MANAGED_APP_FILES=(
+  "config.js"
+  "config-prefs.js"
+)
+
+MANAGED_PROFILE_FILES=(
+  "bottomStocks.uc.js"
+  "rebuild_userChrome.uc.js"
+  "test.uc.js"
+  "userContent.css"
+  "utils/chrome.manifest"
+  "utils/userChrome.jsm"
+  "utils/xPref.jsm"
+  "utils/BottomStocksParent.sys.mjs"
+  "utils/BottomStocksChild.sys.mjs"
+)
 
 find_default_profile() {
   if [[ ! -f "$PROFILES_INI" ]]; then
@@ -65,17 +84,86 @@ find_default_profile() {
 
 find_latest_backup() {
   local backup_root="${SCRIPT_DIR}/backups"
+  local candidate=""
   if [[ ! -d "$backup_root" ]]; then
     return 1
   fi
 
-  find "$backup_root" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1
+  while IFS= read -r candidate; do
+    if backup_matches_target "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d | sort -r)
+
+  return 1
+}
+
+hash_file() {
+  shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
+lookup_manifest_hash() {
+  local manifest_path="$1"
+  local rel_path="$2"
+
+  if [[ -z "$manifest_path" || ! -f "$manifest_path" ]]; then
+    return 1
+  fi
+
+  awk -F '\t' -v path="$rel_path" '$1 == path { print $2; exit }' "$manifest_path"
+}
+
+lookup_target_value() {
+  local target_path="$1"
+  local key="$2"
+
+  if [[ -z "$target_path" || ! -f "$target_path" ]]; then
+    return 1
+  fi
+
+  awk -F '\t' -v key="$key" '$1 == key { print $2; exit }' "$target_path"
+}
+
+backup_matches_target() {
+  local backup_dir="$1"
+  local target_path="${backup_dir}/${TARGET_NAME}"
+  local backup_firefox_app=""
+  local backup_profile_dir=""
+
+  backup_firefox_app="$(lookup_target_value "$target_path" "firefox_app" || true)"
+  backup_profile_dir="$(lookup_target_value "$target_path" "profile_dir" || true)"
+
+  [[ -n "$backup_firefox_app" && -n "$backup_profile_dir" ]] || return 1
+  [[ "$backup_firefox_app" == "$FIREFOX_APP" && "$backup_profile_dir" == "$PROFILE_DIR" ]]
 }
 
 restore_or_remove() {
   local live_path="$1"
   local backup_path="$2"
   local package_path="$3"
+  local rel_path="$4"
+  local manifest_path="${BACKUP_DIR:+${BACKUP_DIR}/${MANIFEST_NAME}}"
+  local installed_hash=""
+
+  installed_hash="$(lookup_manifest_hash "$manifest_path" "$rel_path" || true)"
+
+  if [[ ! -e "$live_path" ]]; then
+    if [[ -n "$backup_path" && -f "$backup_path" ]]; then
+      echo "Left missing (deleted or changed after install): $live_path"
+    fi
+    return
+  fi
+
+  if [[ -n "$installed_hash" ]]; then
+    if [[ "$(hash_file "$live_path")" != "$installed_hash" ]]; then
+      echo "Left in place (modified after install): $live_path"
+      return
+    fi
+  elif [[ -f "$package_path" ]] && ! cmp -s "$live_path" "$package_path"; then
+    echo "Left in place (modified or no install manifest): $live_path"
+    return
+  fi
 
   if [[ -n "$backup_path" && -f "$backup_path" ]]; then
     mkdir -p "$(dirname "$live_path")"
@@ -127,33 +215,26 @@ APP_RESOURCES="${FIREFOX_APP}/Contents/Resources"
 APP_PREFS_DIR="${APP_RESOURCES}/defaults/pref"
 PROFILE_CHROME_DIR="${PROFILE_DIR}/chrome"
 
-restore_or_remove \
-  "${APP_RESOURCES}/config.js" \
-  "${BACKUP_DIR:+${BACKUP_DIR}/app/config.js}" \
-  "${SCRIPT_DIR}/app/config.js"
+for rel_path in "${MANAGED_APP_FILES[@]}"; do
+  if [[ "$rel_path" == "config.js" ]]; then
+    live_path="${APP_RESOURCES}/${rel_path}"
+  else
+    live_path="${APP_PREFS_DIR}/${rel_path}"
+  fi
 
-restore_or_remove \
-  "${APP_PREFS_DIR}/config-prefs.js" \
-  "${BACKUP_DIR:+${BACKUP_DIR}/app/config-prefs.js}" \
-  "${SCRIPT_DIR}/app/config-prefs.js"
+  restore_or_remove \
+    "$live_path" \
+    "${BACKUP_DIR:+${BACKUP_DIR}/app/${rel_path}}" \
+    "${SCRIPT_DIR}/app/${rel_path}" \
+    "app/${rel_path}"
+done
 
-PROFILE_FILES=(
-  "bottomStocks.uc.js"
-  "rebuild_userChrome.uc.js"
-  "test.uc.js"
-  "userContent.css"
-  "utils/chrome.manifest"
-  "utils/userChrome.jsm"
-  "utils/xPref.jsm"
-  "utils/BottomStocksParent.sys.mjs"
-  "utils/BottomStocksChild.sys.mjs"
-)
-
-for rel_path in "${PROFILE_FILES[@]}"; do
+for rel_path in "${MANAGED_PROFILE_FILES[@]}"; do
   restore_or_remove \
     "${PROFILE_CHROME_DIR}/${rel_path}" \
     "${BACKUP_DIR:+${BACKUP_DIR}/profile/chrome/${rel_path}}" \
-    "${SCRIPT_DIR}/profile/chrome/${rel_path}"
+    "${SCRIPT_DIR}/profile/chrome/${rel_path}" \
+    "profile/chrome/${rel_path}"
 done
 
 rmdir "${PROFILE_CHROME_DIR}/utils" 2>/dev/null || true

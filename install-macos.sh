@@ -6,6 +6,25 @@ FIREFOX_APP="${FIREFOX_APP:-/Applications/Firefox.app}"
 PROFILES_INI="${HOME}/Library/Application Support/Firefox/profiles.ini"
 PROFILE_DIR="${PROFILE_DIR:-}"
 BACKUP_ROOT="${SCRIPT_DIR}/backups/$(date +%Y%m%d-%H%M%S)"
+MANIFEST_FILE="${BACKUP_ROOT}/install-manifest.tsv"
+TARGET_FILE="${BACKUP_ROOT}/install-target.tsv"
+
+MANAGED_APP_FILES=(
+  "config.js"
+  "config-prefs.js"
+)
+
+MANAGED_PROFILE_FILES=(
+  "bottomStocks.uc.js"
+  "rebuild_userChrome.uc.js"
+  "test.uc.js"
+  "userContent.css"
+  "utils/chrome.manifest"
+  "utils/userChrome.jsm"
+  "utils/xPref.jsm"
+  "utils/BottomStocksParent.sys.mjs"
+  "utils/BottomStocksChild.sys.mjs"
+)
 
 find_default_profile() {
   if [[ ! -f "$PROFILES_INI" ]]; then
@@ -63,6 +82,39 @@ find_default_profile() {
   ' "$PROFILES_INI"
 }
 
+hash_file() {
+  shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
+backup_if_exists() {
+  local live_path="$1"
+  local backup_path="$2"
+
+  if [[ -f "$live_path" ]]; then
+    mkdir -p "$(dirname "$backup_path")"
+    cp "$live_path" "$backup_path"
+  fi
+}
+
+record_manifest_entry() {
+  local rel_path="$1"
+  local live_path="$2"
+
+  printf '%s\t%s\n' "$rel_path" "$(hash_file "$live_path")" >> "$MANIFEST_FILE"
+}
+
+install_managed_file() {
+  local source_path="$1"
+  local live_path="$2"
+  local backup_path="$3"
+  local rel_path="$4"
+
+  backup_if_exists "$live_path" "$backup_path"
+  mkdir -p "$(dirname "$live_path")"
+  cp "$source_path" "$live_path"
+  record_manifest_entry "$rel_path" "$live_path"
+}
+
 if [[ -z "$PROFILE_DIR" ]]; then
   PROFILE_DIR="$(find_default_profile || true)"
 fi
@@ -85,25 +137,33 @@ fi
 APP_RESOURCES="${FIREFOX_APP}/Contents/Resources"
 APP_PREFS_DIR="${APP_RESOURCES}/defaults/pref"
 PROFILE_CHROME_DIR="${PROFILE_DIR}/chrome"
-PACKAGE_PROFILE_DIR="${SCRIPT_DIR}/profile/chrome"
 
-mkdir -p "$BACKUP_ROOT/app" "$BACKUP_ROOT/profile" "$APP_PREFS_DIR" "$PROFILE_CHROME_DIR"
+mkdir -p "$BACKUP_ROOT" "$APP_PREFS_DIR" "$PROFILE_CHROME_DIR" "$PROFILE_CHROME_DIR/utils"
+: > "$MANIFEST_FILE"
+printf 'firefox_app\t%s\nprofile_dir\t%s\n' "$FIREFOX_APP" "$PROFILE_DIR" > "$TARGET_FILE"
 
-if [[ -f "${APP_RESOURCES}/config.js" ]]; then
-  cp "${APP_RESOURCES}/config.js" "${BACKUP_ROOT}/app/config.js"
-fi
+for rel_path in "${MANAGED_APP_FILES[@]}"; do
+  source_path="${SCRIPT_DIR}/app/${rel_path}"
+  if [[ "$rel_path" == "config.js" ]]; then
+    live_path="${APP_RESOURCES}/${rel_path}"
+  else
+    live_path="${APP_PREFS_DIR}/${rel_path}"
+  fi
 
-if [[ -f "${APP_PREFS_DIR}/config-prefs.js" ]]; then
-  cp "${APP_PREFS_DIR}/config-prefs.js" "${BACKUP_ROOT}/app/config-prefs.js"
-fi
+  install_managed_file \
+    "$source_path" \
+    "$live_path" \
+    "${BACKUP_ROOT}/app/${rel_path}" \
+    "app/${rel_path}"
+done
 
-if [[ -d "${PROFILE_CHROME_DIR}" ]]; then
-  cp -R "${PROFILE_CHROME_DIR}" "${BACKUP_ROOT}/profile/chrome"
-fi
-
-cp "${SCRIPT_DIR}/app/config.js" "${APP_RESOURCES}/config.js"
-cp "${SCRIPT_DIR}/app/config-prefs.js" "${APP_PREFS_DIR}/config-prefs.js"
-cp -R "${PACKAGE_PROFILE_DIR}/." "${PROFILE_CHROME_DIR}/"
+for rel_path in "${MANAGED_PROFILE_FILES[@]}"; do
+  install_managed_file \
+    "${SCRIPT_DIR}/profile/chrome/${rel_path}" \
+    "${PROFILE_CHROME_DIR}/${rel_path}" \
+    "${BACKUP_ROOT}/profile/chrome/${rel_path}" \
+    "profile/chrome/${rel_path}"
+done
 
 chmod -R u+rwX "${PROFILE_CHROME_DIR}"
 

@@ -10,8 +10,8 @@ let cache = {
   key: "",
   quotes: [],
   lastUpdated: 0,
+  requestId: 0,
   inFlight: null,
-  token: 0,
 };
 
 function getPrefs() {
@@ -57,7 +57,7 @@ function setStoredSymbols(symbols) {
   const nextSymbols = normalized.length ? normalized : [];
 
   getPrefs().setStringPref(PREF_SYMBOLS, JSON.stringify(nextSymbols));
-  cache.token += 1;
+  cache.requestId += 1;
   cache.key = "";
   cache.lastUpdated = 0;
   cache.quotes = [];
@@ -207,38 +207,59 @@ async function fetchQuote(entry) {
   }
 }
 
-async function getQuotes() {
+function createPayload(key = cache.key, quotes = cache.quotes, lastUpdated = cache.lastUpdated) {
+  return {
+    key,
+    quotes: quotes.slice(),
+    lastUpdated,
+  };
+}
+
+async function getQuotes(options = {}) {
+  const force = !!options.force;
   const entries = getEntries();
   const key = entries.map(entry => entry.label).join(",");
 
-  if (cache.inFlight) {
-    return cache.inFlight;
+  if (!force && cache.inFlight?.key === key) {
+    return cache.inFlight.promise;
   }
 
-  if (cache.key === key && cache.lastUpdated && Date.now() - cache.lastUpdated < CACHE_MS) {
-    return cache;
+  if (!force && cache.key === key && cache.lastUpdated && Date.now() - cache.lastUpdated < CACHE_MS) {
+    return createPayload();
   }
 
-  cache.inFlight = (async () => {
-    const token = cache.token;
-    cache.key = key;
+  const requestId = ++cache.requestId;
+  const promise = (async () => {
     const quotes = await Promise.all(entries.map(fetchQuote));
 
-    if (token !== cache.token || cache.key !== key) {
-      cache.inFlight = null;
-      return cache;
+    if (requestId !== cache.requestId) {
+      return getQuotes();
     }
 
+    cache.key = key;
     cache.quotes = quotes;
     cache.lastUpdated = Date.now();
-    cache.inFlight = null;
-    return cache;
-  })().catch(error => {
-    cache.inFlight = null;
-    throw error;
-  });
+    return createPayload(key, quotes, cache.lastUpdated);
+  })();
 
-  return cache.inFlight;
+  cache.inFlight = {
+    key,
+    requestId,
+    promise,
+  };
+
+  try {
+    return await promise;
+  } finally {
+    if (cache.inFlight?.requestId === requestId) {
+      cache.inFlight = null;
+    }
+  }
+}
+
+function refreshQuotes() {
+  cache.lastUpdated = 0;
+  return getQuotes({ force: true });
 }
 
 function removeSymbol(index) {
@@ -287,6 +308,8 @@ export class UCBottomStocksParent extends JSWindowActorParent {
     switch (message.name) {
       case "RequestQuotes":
         return getQuotes();
+      case "RefreshQuotes":
+        return refreshQuotes();
       case "RemoveSymbol":
         removeSymbol(message.data?.index);
         return getQuotes();

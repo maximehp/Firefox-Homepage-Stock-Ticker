@@ -1,11 +1,10 @@
 @-moz-document url("about:newtab"), url("about:home") {
   :root {
     --uc-stockbar-gap: 8px;
-    --uc-stock-surface: var(--newtab-background-card, var(--newtab-background-color-secondary));
     --uc-stock-radius: var(--border-radius-large, 16px);
-    --uc-stock-shadow-hover: var(--box-shadow-card, 0 2px 14px 0 var(--newtab-section-card-box-shadow-color, rgba(0,0,0,0.2)));
-    --uc-stock-add-size: 34px;
+    --uc-stock-action-size: var(--size-item-medium, 32px);
     --uc-stock-hover-bleed: 3px;
+    --uc-stock-menu-offset: var(--space-xsmall, 4px);
   }
 
   #uc-stockbar {
@@ -14,7 +13,7 @@
     bottom: max(12px, env(safe-area-inset-bottom)) !important;
     transform: translateX(-50%) !important;
     width: max-content !important;
-    max-width: calc(100vw - 24px - var(--uc-stockbar-gap) - var(--uc-stock-add-size) - (var(--uc-stock-hover-bleed) * 2)) !important;
+    max-width: calc(100vw - 24px - var(--uc-stockbar-gap) - var(--uc-stock-action-size) - (var(--uc-stock-hover-bleed) * 2)) !important;
     display: block !important;
     position: fixed !important;
     padding: 0 !important;
@@ -32,15 +31,30 @@
     display: inline-flex !important;
     align-items: center !important;
     gap: var(--uc-stockbar-gap) !important;
-    max-width: inherit !important;
-    padding: 8px var(--uc-stock-hover-bleed) !important;
-    overflow-x: visible !important;
-    overflow-y: visible !important;
-    scrollbar-width: none !important;
+    width: max-content !important;
+    will-change: transform !important;
   }
 
-  #uc-stockbar .uc-stock-track::-webkit-scrollbar {
+  #uc-stockbar .uc-stock-track-viewport {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    max-width: inherit !important;
+    padding: 8px var(--uc-stock-hover-bleed) !important;
+    overflow: visible !important;
+    scrollbar-width: none !important;
+    overscroll-behavior-x: contain !important;
+  }
+
+  #uc-stockbar .uc-stock-track-viewport::-webkit-scrollbar {
     display: none !important;
+  }
+
+  #uc-stockbar .uc-stock-strip {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: var(--uc-stockbar-gap) !important;
+    width: max-content !important;
   }
 
   #uc-stockbar .uc-stock-item {
@@ -54,7 +68,6 @@
     background: transparent !important;
     border: 0 !important;
     box-shadow: none !important;
-    transition: transform 140ms ease !important;
     cursor: grab !important;
   }
 
@@ -80,7 +93,6 @@
     border: 0 !important;
     border-radius: inherit !important;
     box-shadow: none !important;
-    transition: color 150ms ease !important;
     cursor: pointer !important;
   }
 
@@ -92,7 +104,6 @@
     border-radius: inherit !important;
     background: transparent !important;
     box-shadow: none !important;
-    transition: background 150ms ease, box-shadow 150ms ease !important;
     pointer-events: none !important;
   }
 
@@ -101,10 +112,13 @@
     background: transparent !important;
   }
 
+  #uc-stockbar.is-editing .uc-stock-item .uc-stock-link::before {
+    background: color-mix(in srgb, var(--button-text-color-hover) 14%, transparent) !important;
+  }
+
   #uc-stockbar .uc-stock-item:hover .uc-stock-link::before,
   #uc-stockbar .uc-stock-item:focus-within .uc-stock-link::before {
-    background: var(--uc-stock-surface) !important;
-    box-shadow: var(--uc-stock-shadow-hover) !important;
+    background: color-mix(in srgb, var(--button-text-color-hover) 14%, transparent) !important;
   }
 
   #uc-stockbar .uc-stock-link:hover,
@@ -134,16 +148,10 @@
     display: inline-grid !important;
     place-items: center !important;
     overflow: hidden !important;
-    opacity: 0 !important;
+    opacity: 0;
     box-shadow: 0 1px 4px rgba(0,0,0,0.18) !important;
     outline: none !important;
     pointer-events: none !important;
-    transition:
-      opacity 140ms ease,
-      background 140ms ease,
-      color 140ms ease,
-      border-color 140ms ease,
-      transform 140ms ease !important;
     cursor: pointer !important;
     transform: translate(24%, -24%) scale(0.9) !important;
   }
@@ -154,25 +162,24 @@
     transform: translateY(-0.5px) !important;
   }
 
-  #uc-stockbar .uc-stock-item:hover .uc-stock-remove,
-  #uc-stockbar .uc-stock-item:focus-within .uc-stock-remove {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transform: translate(28%, -28%) scale(1) !important;
-  }
-
   #uc-stockbar .uc-stock-remove:hover,
   #uc-stockbar .uc-stock-remove:focus-visible {
     background: #ef4444 !important;
+    opacity: 1 !important;
     color: var(--newtab-background-color, #1f1f28) !important;
     border-color: color-mix(in srgb, #ef4444 30%, var(--newtab-border-secondary-color, rgba(255,255,255,0.08))) !important;
     transform: translate(28%, -28%) scale(1.05) !important;
   }
 
-  #uc-stockbar .uc-stock-add {
+  #uc-stockbar.is-editing .uc-stock-item .uc-stock-remove {
+    opacity: 0.5 !important;
+    pointer-events: auto !important;
+    transform: translate(28%, -28%) scale(1) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor {
     appearance: none !important;
     -moz-appearance: none !important;
-    position: relative !important;
     position: absolute !important;
     top: 50% !important;
     left: calc(100% - var(--uc-stock-hover-bleed) + var(--uc-stockbar-gap)) !important;
@@ -181,56 +188,156 @@
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: var(--uc-stock-add-size) !important;
-    min-width: var(--uc-stock-add-size) !important;
-    height: var(--uc-stock-add-size) !important;
-    min-height: var(--uc-stock-add-size) !important;
+    width: var(--uc-stock-action-size) !important;
+    min-width: var(--uc-stock-action-size) !important;
+    height: var(--uc-stock-action-size) !important;
+    min-height: var(--uc-stock-action-size) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .context-menu-button {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: var(--uc-stock-action-size) !important;
+    min-width: var(--uc-stock-action-size) !important;
+    height: var(--uc-stock-action-size) !important;
+    min-height: var(--uc-stock-action-size) !important;
+    margin: 0 !important;
     padding: 0 !important;
-    border-radius: var(--uc-stock-radius) !important;
     border: 0 !important;
-    background: transparent !important;
-    color: var(--newtab-text-primary-color, white) !important;
-    font: 600 12px/1 system-ui !important;
+    border-radius: var(--border-radius-small, 8px) !important;
+    background-color: transparent !important;
+    background-image: url("chrome://global/skin/icons/more.svg") !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-size: 16px !important;
     cursor: pointer !important;
+    fill: var(--newtab-button-text, var(--newtab-text-primary-color, currentColor)) !important;
+    -moz-context-properties: fill !important;
+    opacity: 1 !important;
     box-shadow: none !important;
     outline: none !important;
-    transition: transform 140ms ease !important;
   }
 
-  #uc-stockbar .uc-stock-add::before {
-    content: "" !important;
+  #uc-stockbar .uc-stock-menu-anchor .context-menu-button:hover {
+    background-color: var(--newtab-button-hover-background, var(--button-background-color-hover, rgba(255,255,255,0.08))) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .context-menu-button:hover:active,
+  #uc-stockbar .uc-stock-menu-anchor.open .context-menu-button,
+  #uc-stockbar .uc-stock-menu-anchor .context-menu-button[aria-expanded="true"] {
+    background-color: var(--newtab-button-active-background, var(--button-background-color-active, rgba(255,255,255,0.14))) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .context-menu-button:focus-visible {
+    background-color: var(--newtab-button-focus-background, var(--button-background-color-hover, rgba(255,255,255,0.08))) !important;
+    outline: var(--focus-outline, 2px solid Highlight) !important;
+    outline-offset: 0 !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .uc-stock-done-button {
+    background-image: url("chrome://global/skin/icons/check.svg") !important;
+    background-color: var(--newtab-primary-action-background, var(--color-accent-primary)) !important;
+    fill: var(--newtab-primary-element-text-color, white) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .uc-stock-done-button:hover {
+    background-color: var(--newtab-primary-element-hover-color, var(--color-accent-primary-hover, var(--color-accent-primary))) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .uc-stock-done-button:hover:active,
+  #uc-stockbar .uc-stock-menu-anchor .uc-stock-done-button:active {
+    background-color: var(--newtab-primary-element-active-color, var(--color-accent-primary-active, var(--color-accent-primary))) !important;
+  }
+
+  #uc-stockbar .uc-stock-menu-anchor .uc-stock-done-button:focus-visible {
+    background-color: var(--newtab-primary-action-background, var(--color-accent-primary)) !important;
+  }
+
+  #uc-stockbar .uc-stock-context-menu {
     position: absolute !important;
-    inset: calc(var(--uc-stock-hover-bleed) * -1) !important;
-    z-index: 0 !important;
-    border-radius: inherit !important;
+    inset-inline-end: 0 !important;
+    inset-inline-start: auto !important;
+    inset-block-start: auto !important;
+    inset-block-end: calc(100% + var(--uc-stock-menu-offset)) !important;
+    display: block !important;
+    min-width: 160px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: var(--newtab-background-color-secondary, var(--background-color-box, rgba(28,27,34,0.96))) !important;
+    color: var(--newtab-text-primary-color, var(--text-color, inherit)) !important;
+    border: 1px solid var(--border-color-deemphasized, rgba(255,255,255,0.08)) !important;
+    border-radius: var(--border-radius-small, 8px) !important;
+    box-shadow: var(--box-shadow-popup, 0 5px 10px rgba(0,0,0,0.3)) !important;
+    z-index: 4 !important;
+  }
+
+  #uc-stockbar .uc-stock-context-menu > ul {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 6px 0 !important;
+  }
+
+  #uc-stockbar .uc-stock-context-menu > ul > li {
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  #uc-stockbar .uc-stock-context-menu > ul > li > button {
+    appearance: none !important;
+    -moz-appearance: none !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: var(--space-xsmall, 4px) var(--space-medium, 16px) !important;
+    border: 0 !important;
     background: transparent !important;
-    box-shadow: none !important;
-    transition: background 150ms ease, box-shadow 150ms ease !important;
-    pointer-events: none !important;
+    color: inherit !important;
+    cursor: pointer !important;
+    display: flex !important;
+    font: inherit !important;
+    outline: none !important;
+    text-align: start !important;
+    white-space: nowrap !important;
   }
 
-  #uc-stockbar .uc-stock-add:hover,
-  #uc-stockbar .uc-stock-add:focus-visible {
-    background: transparent !important;
-    box-shadow: none !important;
-    transform: translateY(-50%) !important;
+  #uc-stockbar .uc-stock-context-menu > ul > li > button:hover,
+  #uc-stockbar .uc-stock-context-menu > ul > li > button:focus-visible {
+    background: var(--newtab-element-secondary-hover-color, var(--button-background-color-hover, rgba(255,255,255,0.08))) !important;
   }
 
-  #uc-stockbar .uc-stock-add:hover::before,
-  #uc-stockbar .uc-stock-add:focus-visible::before {
-    background: var(--uc-stock-surface) !important;
-    box-shadow: var(--uc-stock-shadow-hover) !important;
+  #uc-stockbar .uc-stock-context-menu > ul > li > button:active {
+    background: var(--newtab-element-secondary-active-color, var(--button-background-color-active, rgba(255,255,255,0.14))) !important;
   }
 
-  #uc-stockbar .uc-stock-add:active {
-    transform: translateY(calc(-50% + 1px)) !important;
+  #uc-stockbar .uc-stock-track-viewport.is-edit-scroll,
+  #uc-stockbar .uc-stock-track-viewport.is-marquee {
+    overflow: hidden !important;
+    mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent) !important;
+    -webkit-mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent) !important;
   }
 
-  #uc-stockbar .uc-stock-add-icon {
-    position: relative !important;
-    z-index: 1 !important;
-    font: 700 14px/1 system-ui !important;
-    color: var(--newtab-text-primary-color, white) !important;
+  #uc-stockbar .uc-stock-track-viewport.is-edit-scroll {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    cursor: grab !important;
+    scroll-behavior: smooth !important;
+  }
+
+  #uc-stockbar .uc-stock-track.is-marquee {
+    animation: uc-stock-marquee var(--uc-stock-scroll-duration, 24s) linear infinite !important;
+  }
+
+  #uc-stockbar .uc-stock-track.is-marquee:hover,
+  #uc-stockbar .uc-stock-track.is-marquee:focus-within {
+    animation-play-state: paused !important;
+  }
+
+  #uc-stockbar .uc-stock-strip.is-clone .uc-stock-remove {
+    display: none !important;
   }
 
   #uc-stockbar .uc-symbol {
@@ -258,5 +365,14 @@
 
   #uc-stockbar .flat {
     color: #cbd5e1 !important;
+  }
+
+  @keyframes uc-stock-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-1 * var(--uc-stock-scroll-distance, 0px)));
+    }
   }
 }
