@@ -4,13 +4,18 @@ Add a stock ticker bar to the real built-in Firefox Home / New Tab page without 
 
 This project uses Firefox AutoConfig plus `userChromeJS`. It is not a WebExtension.
 
+![Firefox Home Stocks Kit screenshot](docs/stock-bar-screenshot.png)
+
 ## What It Does
 
 - keeps the real Firefox Home / New Tab page
 - keeps the native Firefox logo and search box
 - keeps recommended and pinned shortcuts
 - adds a stock ticker row at the bottom of `about:newtab` and `about:home`
-- lets you add, remove, and reorder symbols directly from the page
+- lets you add, refresh, remove, and reorder symbols directly from the page
+- uses a Firefox-style three-dots action menu with `Add`, `Refresh`, and `Edit`
+- supports edit mode with a Firefox-themed check button and visible delete controls
+- fades and auto-scrolls long symbol lists like a ticker, then switches to manual scrolling while editing
 
 ## Requirements
 
@@ -26,6 +31,8 @@ firefox-home-stocks-kit/
   app/
     config.js
     config-prefs.js
+  docs/
+    stock-bar-screenshot.png
   profile/
     chrome/
       bottomStocks.uc.js
@@ -47,6 +54,13 @@ firefox-home-stocks-kit/
 ## How It Works
 
 Firefox loads the app-side AutoConfig files from `app/`. Those files bootstrap `userChromeJS` from the target Firefox profile. The profile-side scripts then register a window actor for `about:newtab` and `about:home`, fetch quote data from Yahoo Finance's chart endpoint, fall back to Stooq if Yahoo fails, and inject the ticker UI into the native page.
+
+The stock bar uses a Firefox-native interaction model:
+
+- a three-dots action button opens `Add`, `Refresh`, and `Edit`
+- edit mode swaps the menu trigger for an accent-colored check button
+- symbols can be dragged and reordered at any time
+- long lists auto-scroll with edge fades in normal mode and become manually scrollable in edit mode
 
 ## Install
 
@@ -71,9 +85,10 @@ The installer:
 
 - detects the active Firefox profile
 - creates a timestamped backup under `backups/`
+- records install metadata so uninstall can match backups to the correct Firefox app/profile pair
 - copies `app/config.js` into the Firefox app bundle
 - copies `app/config-prefs.js` into the Firefox app bundle defaults
-- copies the `profile/chrome/` files into the selected Firefox profile
+- copies only the managed `profile/chrome/` files into the selected Firefox profile
 
 ## Daily Workflow
 
@@ -105,9 +120,9 @@ BACKUP_DIR="/path/to/firefox-home-stocks-kit/backups/20260323-153000" ./uninstal
 
 `uninstall.sh` will:
 
-- try to restore app/profile files from the newest backup, or from `BACKUP_DIR` if provided
+- try to restore app/profile files from the newest matching backup for the selected Firefox app/profile, or from `BACKUP_DIR` if provided
 - otherwise remove only files that still exactly match this project’s installed copies
-- leave changed files in place if it cannot safely determine they belong to this project
+- leave changed files in place if it detects they were modified after install
 
 ## After Install Or Major Changes
 
@@ -122,12 +137,15 @@ BACKUP_DIR="/path/to/firefox-home-stocks-kit/backups/20260323-153000" ./uninstal
 - Quote data comes from Yahoo Finance's chart endpoint, with Stooq as a fallback source.
 - Stock links open on Yahoo Finance.
 - The current implementation assumes US-style symbols when building quote URLs.
+- The action menu currently includes `Add`, `Refresh`, and `Edit`.
+- Edit mode keeps the edge-fade overflow treatment but stops auto-scrolling so you can browse and delete manually.
 
 ## Notes
 
 - This is not a standard extension and will not appear in Firefox’s add-ons UI.
 - Firefox updates may overwrite the app-side `config.js` and `config-prefs.js`. If that happens, rerun `./install-macos.sh`.
 - If you already use your own `userChromeJS` setup, install/uninstall behavior matters: this repo backs up and restores files, but you should still review what is in `backups/` before deleting anything.
+- The included screenshot is a real captured project image stored in `docs/`.
 
 ## Publishing / Sharing
 
