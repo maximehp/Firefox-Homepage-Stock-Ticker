@@ -177,6 +177,8 @@ if (xPref.get(_uc.PREF_SCRIPTSDISABLED) === undefined) {
 }
 
 let UserChrome_js = {
+  backgroundViewLoadedListener: null,
+
   windowObserver: function (subject, topic) {
     if (topic != 'domwindowopened') {
       return;
@@ -209,11 +211,17 @@ let UserChrome_js = {
 
     if (!this.sharedWindowOpened && location.href == 'chrome://extensions/content/dummy.xhtml') {
       this.sharedWindowOpened = true;
+      this.backgroundViewLoadedListener ||= this.messageListener.bind(this);
 
       Management.on('extension-browser-inserted', function (topic, browser) {
-        browser.messageManager.addMessageListener('Extension:BackgroundViewLoaded', this.messageListener.bind(this));
+        browser.messageManager.addMessageListener('Extension:BackgroundViewLoaded', this.backgroundViewLoadedListener);
       }.bind(this));
     } else if (/^(chrome:(?!\/\/global\/content\/commonDialog\.x?html)|about:(?!blank))/i.test(location.href)) {
+      if (window.__ucjsWindowLoaded) {
+        return;
+      }
+      window.__ucjsWindowLoaded = true;
+
       window.UC = UC;
       window._uc = _uc;
       window.xPref = xPref;
@@ -234,7 +242,9 @@ let UserChrome_js = {
     const browser = msg.target;
     const { addonId } = browser._contentPrincipal;
 
-    browser.messageManager.removeMessageListener('Extension:BackgroundViewLoaded', this.messageListener);
+    if (this.backgroundViewLoadedListener) {
+      browser.messageManager.removeMessageListener('Extension:BackgroundViewLoaded', this.backgroundViewLoadedListener);
+    }
 
     if (browser.ownerGlobal.location.href == 'chrome://extensions/content/dummy.xhtml') {
       UC.webExts.set(addonId, browser);

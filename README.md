@@ -46,7 +46,7 @@ firefox-home-stocks-kit/
 
 ## How It Works
 
-Firefox loads the app-side AutoConfig files from `app/`. Those files bootstrap `userChromeJS` from the target Firefox profile. The profile-side scripts then register a window actor for `about:newtab` and `about:home`, fetch quote data from Stooq, and inject the ticker UI into the native page.
+Firefox loads the app-side AutoConfig files from `app/`. Those files bootstrap `userChromeJS` from the target Firefox profile. The profile-side scripts then register a window actor for `about:newtab` and `about:home`, fetch quote data from Yahoo Finance's chart endpoint, fall back to Stooq if Yahoo fails, and inject the ticker UI into the native page.
 
 ## Install
 
@@ -119,7 +119,8 @@ BACKUP_DIR="/path/to/firefox-home-stocks-kit/backups/20260323-153000" ./uninstal
 ## Customization
 
 - Symbols and their order are stored in the Firefox pref `userChromeJS.bottomStocks.symbols`.
-- Quote data currently comes from `stooq.com`.
+- Quote data comes from Yahoo Finance's chart endpoint, with Stooq as a fallback source.
+- Stock links open on Yahoo Finance.
 - The current implementation assumes US-style symbols when building quote URLs.
 
 ## Notes

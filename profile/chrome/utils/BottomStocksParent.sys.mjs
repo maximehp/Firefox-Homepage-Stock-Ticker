@@ -81,33 +81,129 @@ function formatCsvNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-async function fetchQuote(entry) {
-  const url = "https://stooq.com/q/l/?s=" + entry.stooq + "&i=d";
+function formatStooqDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function getYahooChartUrl(symbol) {
+  return (
+    "https://query1.finance.yahoo.com/v8/finance/chart/" +
+    encodeURIComponent(symbol) +
+    "?interval=5m&range=1d"
+  );
+}
+
+function getYahooQuoteHref(symbol) {
+  return "https://finance.yahoo.com/quote/" + encodeURIComponent(symbol);
+}
+
+function formatSessionDateParts(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hours}:${minutes}:${seconds}`,
+  };
+}
+
+async function fetchYahooQuote(entry) {
+  const response = await fetch(getYahooChartUrl(entry.label), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("yahoo-http-" + response.status);
+  }
+
+  const payload = await response.json();
+  const result = payload?.chart?.result?.[0];
+  const meta = result?.meta;
+  const price = formatCsvNumber(meta?.regularMarketPrice);
+  const previousClose = formatCsvNumber(meta?.previousClose);
+
+  if (price == null || previousClose == null) {
+    throw new Error("yahoo-no-data");
+  }
+
+  const session = meta?.regularMarketTime
+    ? formatSessionDateParts(new Date(meta.regularMarketTime * 1000))
+    : { date: null, time: null };
+
+  return {
+    symbol: entry.label,
+    href: getYahooQuoteHref(entry.label),
+    price,
+    changePercent: previousClose ? ((price - previousClose) / previousClose) * 100 : null,
+    sessionDate: session.date,
+    sessionTime: session.time,
+    volume: formatCsvNumber(meta?.regularMarketVolume),
+  };
+}
+
+async function fetchStooqQuote(entry) {
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 14);
+  const url =
+    "https://stooq.com/q/d/l/?s=" +
+    entry.stooq +
+    "&d1=" +
+    formatStooqDate(startDate) +
+    "&d2=" +
+    formatStooqDate(endDate) +
+    "&i=d";
 
   try {
     const response = await fetch(url, { cache: "no-store" });
     const text = (await response.text()).trim();
-    const [symbol, date, time, open, high, low, close, volume] = text.split(",");
-    const openNumber = formatCsvNumber(open);
-    const closeNumber = formatCsvNumber(close);
+    const rows = text
+      .split(/\r?\n/)
+      .slice(1)
+      .map(line => line.trim())
+      .filter(Boolean);
 
-    if (!symbol || closeNumber == null) {
-      return { symbol: entry.label, href: "https://stooq.com/q/?s=" + entry.stooq, error: "no-data" };
+    if (!rows.length) {
+      return { symbol: entry.label, href: getYahooQuoteHref(entry.label), error: "no-data" };
     }
 
-    const changePercent = openNumber ? ((closeNumber - openNumber) / openNumber) * 100 : 0;
+    const latestRow = rows.at(-1).split(",");
+    const previousRow = rows.length > 1 ? rows.at(-2).split(",") : null;
+    const [date, _open, _high, _low, close, volume] = latestRow;
+    const closeNumber = formatCsvNumber(close);
+    const previousCloseNumber = previousRow ? formatCsvNumber(previousRow[4]) : null;
+
+    if (!date || closeNumber == null) {
+      return { symbol: entry.label, href: getYahooQuoteHref(entry.label), error: "no-data" };
+    }
+
+    const changePercent = previousCloseNumber
+      ? ((closeNumber - previousCloseNumber) / previousCloseNumber) * 100
+      : null;
 
     return {
       symbol: entry.label,
-      href: "https://stooq.com/q/?s=" + entry.stooq,
+      href: getYahooQuoteHref(entry.label),
       price: closeNumber,
       changePercent,
       sessionDate: date,
-      sessionTime: time,
+      sessionTime: null,
       volume: formatCsvNumber(volume),
     };
   } catch (error) {
-    return { symbol: entry.label, href: "https://stooq.com/q/?s=" + entry.stooq, error: "network" };
+    return { symbol: entry.label, href: getYahooQuoteHref(entry.label), error: "network" };
+  }
+}
+
+async function fetchQuote(entry) {
+  try {
+    return await fetchYahooQuote(entry);
+  } catch (error) {
+    return fetchStooqQuote(entry);
   }
 }
 

@@ -1,7 +1,5 @@
 // skip 1st line
 Services.console.logStringMessage("CONFIG JS LOADED");
-lockPref("xpinstall.signatures.required", false);
-lockPref("extensions.install_origins.enabled", false);
 
 try {
   const utilsDir = Services.dirsvc.get("UChrm", Ci.nsIFile);
